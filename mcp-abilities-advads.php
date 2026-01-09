@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Advanced Ads
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-advads
  * Description: MCP abilities for Advanced Ads. Manage ads, placements, groups, and settings programmatically.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -158,7 +158,9 @@ function mcp_register_advads_abilities(): void {
             'description'         => 'List all ad placements.',
             'category'            => 'site',
             'input_schema'        => array(
-                'type'       => 'object',
+                'type'                 => 'object',
+                'properties'           => array(),
+                'additionalProperties' => true,
             ),
             'output_schema'       => array(
                 'type'       => 'object',
@@ -173,7 +175,29 @@ function mcp_register_advads_abilities(): void {
                     return $error;
                 }
 
-                $placements = get_option( 'advads-ads-placements', array() );
+                // Advanced Ads 2.0+ stores placements as custom post type.
+                $posts = get_posts( array(
+                    'post_type'      => 'advanced_ads_plcmnt',
+                    'post_status'    => 'any',
+                    'posts_per_page' => 100,
+                ) );
+
+                $placements = array();
+                foreach ( $posts as $post ) {
+                    $type = get_post_meta( $post->ID, 'type', true );
+                    $item = get_post_meta( $post->ID, 'item', true );
+                    $options = get_post_meta( $post->ID, 'options', true );
+                    $placements[] = array(
+                        'id'      => $post->ID,
+                        'slug'    => $post->post_name,
+                        'name'    => $post->post_title,
+                        'status'  => $post->post_status,
+                        'type'    => $type ?: 'default',
+                        'item'    => $item ?: '',
+                        'options' => $options ?: array(),
+                    );
+                }
+
                 return array(
                     'success'    => true,
                     'placements' => $placements,
@@ -230,23 +254,38 @@ function mcp_register_advads_abilities(): void {
                     return $error;
                 }
 
-                $placements = get_option( 'advads-ads-placements', array() );
-                $slug = sanitize_key( $input['slug'] );
+                $slug = sanitize_title( $input['slug'] );
 
-                if ( isset( $placements[ $slug ] ) ) {
+                // Check if placement with slug exists.
+                $existing = get_posts( array(
+                    'post_type'   => 'advanced_ads_plcmnt',
+                    'name'        => $slug,
+                    'post_status' => 'any',
+                    'numberposts' => 1,
+                ) );
+
+                if ( ! empty( $existing ) ) {
                     return array( 'success' => false, 'message' => 'Placement slug already exists.' );
                 }
 
-                $placements[ $slug ] = array(
-                    'type'    => sanitize_text_field( $input['type'] ),
-                    'name'    => sanitize_text_field( $input['name'] ),
-                    'item'    => sanitize_text_field( $input['item'] ),
-                    'options' => $input['options'] ?? array(),
-                );
+                $post_id = wp_insert_post( array(
+                    'post_type'   => 'advanced_ads_plcmnt',
+                    'post_title'  => sanitize_text_field( $input['name'] ),
+                    'post_name'   => $slug,
+                    'post_status' => 'publish',
+                ) );
 
-                update_option( 'advads-ads-placements', $placements );
+                if ( is_wp_error( $post_id ) ) {
+                    return array( 'success' => false, 'message' => $post_id->get_error_message() );
+                }
 
-                return array( 'success' => true, 'slug' => $slug, 'message' => 'Placement created.' );
+                update_post_meta( $post_id, 'type', sanitize_text_field( $input['type'] ) );
+                update_post_meta( $post_id, 'item', sanitize_text_field( $input['item'] ) );
+                if ( ! empty( $input['options'] ) ) {
+                    update_post_meta( $post_id, 'options', $input['options'] );
+                }
+
+                return array( 'success' => true, 'slug' => $slug, 'id' => $post_id, 'message' => 'Placement created.' );
             },
             'permission_callback' => 'mcp_advads_permission_callback',
         )
@@ -260,11 +299,11 @@ function mcp_register_advads_abilities(): void {
             'category'            => 'site',
             'input_schema'        => array(
                 'type'                 => 'object',
-                'required'             => array( 'slug' ),
+                'required'             => array( 'id' ),
                 'properties'           => array(
-                    'slug' => array(
-                        'type'        => 'string',
-                        'description' => 'Placement slug to delete.',
+                    'id' => array(
+                        'type'        => 'integer',
+                        'description' => 'Placement ID to delete.',
                     ),
                 ),
                 'additionalProperties' => false,
@@ -281,15 +320,17 @@ function mcp_register_advads_abilities(): void {
                     return $error;
                 }
 
-                $placements = get_option( 'advads-ads-placements', array() );
-                $slug = sanitize_key( $input['slug'] );
+                $post_id = (int) $input['id'];
 
-                if ( ! isset( $placements[ $slug ] ) ) {
+                $post = get_post( $post_id );
+                if ( ! $post || 'advanced_ads_plcmnt' !== $post->post_type ) {
                     return array( 'success' => false, 'message' => 'Placement not found.' );
                 }
 
-                unset( $placements[ $slug ] );
-                update_option( 'advads-ads-placements', $placements );
+                $result = wp_delete_post( $post_id, true );
+                if ( ! $result ) {
+                    return array( 'success' => false, 'message' => 'Failed to delete placement.' );
+                }
 
                 return array( 'success' => true, 'message' => 'Placement deleted.' );
             },
@@ -455,9 +496,13 @@ function mcp_register_advads_abilities(): void {
 
                 $issues = array();
                 $adsense = get_option( 'advanced-ads-adsense', array() );
-                $placements = get_option( 'advads-ads-placements', array() );
                 $ads = get_posts( array(
                     'post_type'      => 'advanced_ads',
+                    'post_status'    => 'publish',
+                    'posts_per_page' => -1,
+                ) );
+                $placements = get_posts( array(
+                    'post_type'      => 'advanced_ads_plcmnt',
                     'post_status'    => 'publish',
                     'posts_per_page' => -1,
                 ) );

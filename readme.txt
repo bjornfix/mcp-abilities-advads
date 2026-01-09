@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, advanced-ads, adsense, ads
 Requires at least: 6.0
 Tested up to: 6.9
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 Requires Plugins: mcp-expose-abilities
 License: GPLv2 or later
 
@@ -45,6 +45,10 @@ This add-on provides 12 abilities for managing Advanced Ads through the MCP inte
 
 == Changelog ==
 
+= 1.0.1 =
+* Fixed placements to use Advanced Ads 2.0+ custom post type storage
+* Placements are now stored as `advanced_ads_plcmnt` posts, not options
+
 = 1.0.0 =
 * Initial release
-* 12 abilities for ads, placements, groups, and settings management
+* 9 abilities for ads, placements, groups, and settings management
