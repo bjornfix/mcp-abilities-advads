@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Advanced Ads
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-advads
  * Description: MCP abilities for Advanced Ads. Manage ads, placements, groups, and settings programmatically.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -37,6 +37,15 @@ function mcp_advads_require_active(): ?array {
 
 function mcp_advads_permission_callback(): bool {
     return current_user_can( 'manage_options' );
+}
+
+function mcp_advads_normalize_status( string $status ): string {
+    $status  = sanitize_key( $status );
+    $allowed = array( 'publish', 'draft', 'pending', 'private', 'future', 'any' );
+    if ( in_array( $status, $allowed, true ) ) {
+        return $status;
+    }
+    return 'any';
 }
 
 function mcp_register_advads_abilities(): void {
@@ -75,10 +84,13 @@ function mcp_register_advads_abilities(): void {
                     return $error;
                 }
 
+                $status = isset( $input['status'] ) ? mcp_advads_normalize_status( $input['status'] ) : 'any';
                 $posts = get_posts( array(
-                    'post_type'      => 'advanced_ads',
-                    'post_status'    => $input['status'] ?? 'any',
-                    'posts_per_page' => 100,
+                    'post_type'              => 'advanced_ads',
+                    'post_status'            => $status,
+                    'posts_per_page'         => 100,
+                    'no_found_rows'          => true,
+                    'update_post_term_cache' => false,
                 ) );
 
                 $ads = array();
@@ -152,6 +164,226 @@ function mcp_register_advads_abilities(): void {
     );
 
     wp_register_ability(
+        'advads/create-ad',
+        array(
+            'label'               => 'Create Ad',
+            'description'         => 'Create a new Advanced Ads advertisement.',
+            'category'            => 'site',
+            'input_schema'        => array(
+                'type'                 => 'object',
+                'required'             => array( 'title', 'content' ),
+                'properties'           => array(
+                    'title'   => array(
+                        'type'        => 'string',
+                        'description' => 'Ad title.',
+                    ),
+                    'content' => array(
+                        'type'        => 'string',
+                        'description' => 'Ad content (HTML).',
+                    ),
+                    'status'  => array(
+                        'type'        => 'string',
+                        'default'     => 'publish',
+                        'description' => 'Post status (publish, draft).',
+                    ),
+                    'type'    => array(
+                        'type'        => 'string',
+                        'description' => 'Ad type (plain, image, adsense, etc.).',
+                    ),
+                    'options' => array(
+                        'type'        => 'object',
+                        'description' => 'Advanced Ads options array.',
+                    ),
+                ),
+                'additionalProperties' => false,
+            ),
+            'output_schema'       => array(
+                'type'       => 'object',
+                'properties' => array(
+                    'success' => array( 'type' => 'boolean' ),
+                    'id'      => array( 'type' => 'integer' ),
+                    'message' => array( 'type' => 'string' ),
+                ),
+            ),
+            'execute_callback'    => function ( array $input ): array {
+                if ( $error = mcp_advads_require_active() ) {
+                    return $error;
+                }
+
+                $title   = sanitize_text_field( $input['title'] ?? '' );
+                $content = wp_kses_post( $input['content'] ?? '' );
+
+                if ( empty( $title ) || empty( $content ) ) {
+                    return array( 'success' => false, 'message' => 'title and content are required.' );
+                }
+
+                $post_id = wp_insert_post( array(
+                    'post_type'    => 'advanced_ads',
+                    'post_title'   => $title,
+                    'post_content' => $content,
+                    'post_status'  => sanitize_key( $input['status'] ?? 'publish' ),
+                ) );
+
+                if ( is_wp_error( $post_id ) ) {
+                    return array( 'success' => false, 'message' => $post_id->get_error_message() );
+                }
+
+                $options = array();
+                if ( ! empty( $input['options'] ) && is_array( $input['options'] ) ) {
+                    $options = $input['options'];
+                }
+                if ( ! empty( $input['type'] ) ) {
+                    $options['type'] = sanitize_text_field( $input['type'] );
+                }
+
+                if ( ! empty( $options ) ) {
+                    update_post_meta( $post_id, 'advanced_ads_ad_options', $options );
+                }
+
+                return array( 'success' => true, 'id' => $post_id, 'message' => 'Ad created.' );
+            },
+            'permission_callback' => 'mcp_advads_permission_callback',
+        )
+    );
+
+    wp_register_ability(
+        'advads/update-ad',
+        array(
+            'label'               => 'Update Ad',
+            'description'         => 'Update an Advanced Ads advertisement.',
+            'category'            => 'site',
+            'input_schema'        => array(
+                'type'                 => 'object',
+                'required'             => array( 'id' ),
+                'properties'           => array(
+                    'id'              => array(
+                        'type'        => 'integer',
+                        'description' => 'Ad ID.',
+                    ),
+                    'title'           => array( 'type' => 'string' ),
+                    'content'         => array( 'type' => 'string' ),
+                    'status'          => array( 'type' => 'string' ),
+                    'type'            => array( 'type' => 'string' ),
+                    'options'         => array( 'type' => 'object' ),
+                    'replace_options' => array(
+                        'type'        => 'boolean',
+                        'default'     => false,
+                        'description' => 'Replace options instead of merge.',
+                    ),
+                ),
+                'additionalProperties' => false,
+            ),
+            'output_schema'       => array(
+                'type'       => 'object',
+                'properties' => array(
+                    'success' => array( 'type' => 'boolean' ),
+                    'message' => array( 'type' => 'string' ),
+                ),
+            ),
+            'execute_callback'    => function ( array $input ): array {
+                if ( $error = mcp_advads_require_active() ) {
+                    return $error;
+                }
+
+                $post_id = (int) ( $input['id'] ?? 0 );
+                $post = get_post( $post_id );
+                if ( ! $post || 'advanced_ads' !== $post->post_type ) {
+                    return array( 'success' => false, 'message' => 'Ad not found.' );
+                }
+
+                $update = array( 'ID' => $post_id );
+                if ( isset( $input['title'] ) ) {
+                    $update['post_title'] = sanitize_text_field( $input['title'] );
+                }
+                if ( isset( $input['content'] ) ) {
+                    $update['post_content'] = wp_kses_post( $input['content'] );
+                }
+                if ( isset( $input['status'] ) ) {
+                    $update['post_status'] = sanitize_key( $input['status'] );
+                }
+
+                if ( count( $update ) > 1 ) {
+                    $result = wp_update_post( $update, true );
+                    if ( is_wp_error( $result ) ) {
+                        return array( 'success' => false, 'message' => $result->get_error_message() );
+                    }
+                }
+
+                if ( isset( $input['options'] ) && is_array( $input['options'] ) ) {
+                    $options = $input['options'];
+                    if ( ! empty( $input['type'] ) ) {
+                        $options['type'] = sanitize_text_field( $input['type'] );
+                    }
+
+                    if ( ! empty( $input['replace_options'] ) ) {
+                        update_post_meta( $post_id, 'advanced_ads_ad_options', $options );
+                    } else {
+                        $existing = get_post_meta( $post_id, 'advanced_ads_ad_options', true );
+                        if ( ! is_array( $existing ) ) {
+                            $existing = array();
+                        }
+                        update_post_meta( $post_id, 'advanced_ads_ad_options', array_merge( $existing, $options ) );
+                    }
+                } elseif ( ! empty( $input['type'] ) ) {
+                    $existing = get_post_meta( $post_id, 'advanced_ads_ad_options', true );
+                    if ( ! is_array( $existing ) ) {
+                        $existing = array();
+                    }
+                    $existing['type'] = sanitize_text_field( $input['type'] );
+                    update_post_meta( $post_id, 'advanced_ads_ad_options', $existing );
+                }
+
+                return array( 'success' => true, 'message' => 'Ad updated.' );
+            },
+            'permission_callback' => 'mcp_advads_permission_callback',
+        )
+    );
+
+    wp_register_ability(
+        'advads/delete-ad',
+        array(
+            'label'               => 'Delete Ad',
+            'description'         => 'Delete an Advanced Ads advertisement.',
+            'category'            => 'site',
+            'input_schema'        => array(
+                'type'                 => 'object',
+                'required'             => array( 'id' ),
+                'properties'           => array(
+                    'id'    => array( 'type' => 'integer', 'description' => 'Ad ID.' ),
+                    'force' => array( 'type' => 'boolean', 'default' => true ),
+                ),
+                'additionalProperties' => false,
+            ),
+            'output_schema'       => array(
+                'type'       => 'object',
+                'properties' => array(
+                    'success' => array( 'type' => 'boolean' ),
+                    'message' => array( 'type' => 'string' ),
+                ),
+            ),
+            'execute_callback'    => function ( array $input ): array {
+                if ( $error = mcp_advads_require_active() ) {
+                    return $error;
+                }
+
+                $post_id = (int) ( $input['id'] ?? 0 );
+                $post = get_post( $post_id );
+                if ( ! $post || 'advanced_ads' !== $post->post_type ) {
+                    return array( 'success' => false, 'message' => 'Ad not found.' );
+                }
+
+                $result = wp_delete_post( $post_id, ! empty( $input['force'] ) );
+                if ( ! $result ) {
+                    return array( 'success' => false, 'message' => 'Failed to delete ad.' );
+                }
+
+                return array( 'success' => true, 'message' => 'Ad deleted.' );
+            },
+            'permission_callback' => 'mcp_advads_permission_callback',
+        )
+    );
+
+    wp_register_ability(
         'advads/list-placements',
         array(
             'label'               => 'List Placements',
@@ -177,9 +409,11 @@ function mcp_register_advads_abilities(): void {
 
                 // Advanced Ads 2.0+ stores placements as custom post type.
                 $posts = get_posts( array(
-                    'post_type'      => 'advanced_ads_plcmnt',
-                    'post_status'    => 'any',
-                    'posts_per_page' => 100,
+                    'post_type'              => 'advanced_ads_plcmnt',
+                    'post_status'            => 'any',
+                    'posts_per_page'         => 100,
+                    'no_found_rows'          => true,
+                    'update_post_term_cache' => false,
                 ) );
 
                 $placements = array();
@@ -202,6 +436,56 @@ function mcp_register_advads_abilities(): void {
                     'success'    => true,
                     'placements' => $placements,
                     'total'      => count( $placements ),
+                );
+            },
+            'permission_callback' => 'mcp_advads_permission_callback',
+        )
+    );
+
+    wp_register_ability(
+        'advads/get-placement',
+        array(
+            'label'               => 'Get Placement',
+            'description'         => 'Get an ad placement by ID.',
+            'category'            => 'site',
+            'input_schema'        => array(
+                'type'                 => 'object',
+                'required'             => array( 'id' ),
+                'properties'           => array(
+                    'id' => array( 'type' => 'integer', 'description' => 'Placement ID.' ),
+                ),
+                'additionalProperties' => false,
+            ),
+            'output_schema'       => array(
+                'type'       => 'object',
+                'properties' => array(
+                    'success'   => array( 'type' => 'boolean' ),
+                    'placement' => array( 'type' => 'object' ),
+                    'message'   => array( 'type' => 'string' ),
+                ),
+            ),
+            'execute_callback'    => function ( array $input ): array {
+                if ( $error = mcp_advads_require_active() ) {
+                    return $error;
+                }
+
+                $post_id = (int) ( $input['id'] ?? 0 );
+                $post = get_post( $post_id );
+                if ( ! $post || 'advanced_ads_plcmnt' !== $post->post_type ) {
+                    return array( 'success' => false, 'message' => 'Placement not found.' );
+                }
+
+                return array(
+                    'success'   => true,
+                    'placement' => array(
+                        'id'      => $post->ID,
+                        'slug'    => $post->post_name,
+                        'name'    => $post->post_title,
+                        'status'  => $post->post_status,
+                        'type'    => get_post_meta( $post->ID, 'type', true ),
+                        'item'    => get_post_meta( $post->ID, 'item', true ),
+                        'options' => get_post_meta( $post->ID, 'options', true ),
+                    ),
                 );
             },
             'permission_callback' => 'mcp_advads_permission_callback',
@@ -257,14 +541,8 @@ function mcp_register_advads_abilities(): void {
                 $slug = sanitize_title( $input['slug'] );
 
                 // Check if placement with slug exists.
-                $existing = get_posts( array(
-                    'post_type'   => 'advanced_ads_plcmnt',
-                    'name'        => $slug,
-                    'post_status' => 'any',
-                    'numberposts' => 1,
-                ) );
-
-                if ( ! empty( $existing ) ) {
+                $existing = get_page_by_path( $slug, OBJECT, 'advanced_ads_plcmnt' );
+                if ( $existing ) {
                     return array( 'success' => false, 'message' => 'Placement slug already exists.' );
                 }
 
@@ -286,6 +564,78 @@ function mcp_register_advads_abilities(): void {
                 }
 
                 return array( 'success' => true, 'slug' => $slug, 'id' => $post_id, 'message' => 'Placement created.' );
+            },
+            'permission_callback' => 'mcp_advads_permission_callback',
+        )
+    );
+
+    wp_register_ability(
+        'advads/update-placement',
+        array(
+            'label'               => 'Update Placement',
+            'description'         => 'Update an ad placement.',
+            'category'            => 'site',
+            'input_schema'        => array(
+                'type'                 => 'object',
+                'required'             => array( 'id' ),
+                'properties'           => array(
+                    'id'      => array( 'type' => 'integer', 'description' => 'Placement ID.' ),
+                    'slug'    => array( 'type' => 'string' ),
+                    'name'    => array( 'type' => 'string' ),
+                    'status'  => array( 'type' => 'string' ),
+                    'type'    => array( 'type' => 'string' ),
+                    'item'    => array( 'type' => 'string' ),
+                    'options' => array( 'type' => 'object' ),
+                ),
+                'additionalProperties' => false,
+            ),
+            'output_schema'       => array(
+                'type'       => 'object',
+                'properties' => array(
+                    'success' => array( 'type' => 'boolean' ),
+                    'message' => array( 'type' => 'string' ),
+                ),
+            ),
+            'execute_callback'    => function ( array $input ): array {
+                if ( $error = mcp_advads_require_active() ) {
+                    return $error;
+                }
+
+                $post_id = (int) ( $input['id'] ?? 0 );
+                $post = get_post( $post_id );
+                if ( ! $post || 'advanced_ads_plcmnt' !== $post->post_type ) {
+                    return array( 'success' => false, 'message' => 'Placement not found.' );
+                }
+
+                $update = array( 'ID' => $post_id );
+                if ( isset( $input['name'] ) ) {
+                    $update['post_title'] = sanitize_text_field( $input['name'] );
+                }
+                if ( isset( $input['slug'] ) ) {
+                    $update['post_name'] = sanitize_title( $input['slug'] );
+                }
+                if ( isset( $input['status'] ) ) {
+                    $update['post_status'] = sanitize_key( $input['status'] );
+                }
+
+                if ( count( $update ) > 1 ) {
+                    $result = wp_update_post( $update, true );
+                    if ( is_wp_error( $result ) ) {
+                        return array( 'success' => false, 'message' => $result->get_error_message() );
+                    }
+                }
+
+                if ( isset( $input['type'] ) ) {
+                    update_post_meta( $post_id, 'type', sanitize_text_field( $input['type'] ) );
+                }
+                if ( isset( $input['item'] ) ) {
+                    update_post_meta( $post_id, 'item', sanitize_text_field( $input['item'] ) );
+                }
+                if ( isset( $input['options'] ) && is_array( $input['options'] ) ) {
+                    update_post_meta( $post_id, 'options', $input['options'] );
+                }
+
+                return array( 'success' => true, 'message' => 'Placement updated.' );
             },
             'permission_callback' => 'mcp_advads_permission_callback',
         )
@@ -383,6 +733,171 @@ function mcp_register_advads_abilities(): void {
                 }
 
                 return array( 'success' => true, 'groups' => $groups, 'total' => count( $groups ) );
+            },
+            'permission_callback' => 'mcp_advads_permission_callback',
+        )
+    );
+
+    wp_register_ability(
+        'advads/create-group',
+        array(
+            'label'               => 'Create Ad Group',
+            'description'         => 'Create a new ad group.',
+            'category'            => 'site',
+            'input_schema'        => array(
+                'type'                 => 'object',
+                'required'             => array( 'name' ),
+                'properties'           => array(
+                    'name'    => array( 'type' => 'string', 'description' => 'Group name.' ),
+                    'slug'    => array( 'type' => 'string', 'description' => 'Group slug.' ),
+                    'options' => array( 'type' => 'object', 'description' => 'Group options.' ),
+                ),
+                'additionalProperties' => false,
+            ),
+            'output_schema'       => array(
+                'type'       => 'object',
+                'properties' => array(
+                    'success' => array( 'type' => 'boolean' ),
+                    'id'      => array( 'type' => 'integer' ),
+                    'message' => array( 'type' => 'string' ),
+                ),
+            ),
+            'execute_callback'    => function ( array $input ): array {
+                if ( $error = mcp_advads_require_active() ) {
+                    return $error;
+                }
+
+                $name = sanitize_text_field( $input['name'] ?? '' );
+                if ( empty( $name ) ) {
+                    return array( 'success' => false, 'message' => 'name is required.' );
+                }
+
+                $args = array();
+                if ( ! empty( $input['slug'] ) ) {
+                    $args['slug'] = sanitize_title( $input['slug'] );
+                }
+
+                $term = wp_insert_term( $name, 'advanced_ads_groups', $args );
+                if ( is_wp_error( $term ) ) {
+                    return array( 'success' => false, 'message' => $term->get_error_message() );
+                }
+
+                if ( ! empty( $input['options'] ) && is_array( $input['options'] ) ) {
+                    $group_options = get_option( 'advads-ad-groups', array() );
+                    $group_options[ $term['term_id'] ] = $input['options'];
+                    update_option( 'advads-ad-groups', $group_options );
+                }
+
+                return array( 'success' => true, 'id' => $term['term_id'], 'message' => 'Group created.' );
+            },
+            'permission_callback' => 'mcp_advads_permission_callback',
+        )
+    );
+
+    wp_register_ability(
+        'advads/update-group',
+        array(
+            'label'               => 'Update Ad Group',
+            'description'         => 'Update an ad group.',
+            'category'            => 'site',
+            'input_schema'        => array(
+                'type'                 => 'object',
+                'required'             => array( 'id' ),
+                'properties'           => array(
+                    'id'      => array( 'type' => 'integer', 'description' => 'Group ID.' ),
+                    'name'    => array( 'type' => 'string', 'description' => 'Group name.' ),
+                    'slug'    => array( 'type' => 'string', 'description' => 'Group slug.' ),
+                    'options' => array( 'type' => 'object', 'description' => 'Group options.' ),
+                ),
+                'additionalProperties' => false,
+            ),
+            'output_schema'       => array(
+                'type'       => 'object',
+                'properties' => array(
+                    'success' => array( 'type' => 'boolean' ),
+                    'message' => array( 'type' => 'string' ),
+                ),
+            ),
+            'execute_callback'    => function ( array $input ): array {
+                if ( $error = mcp_advads_require_active() ) {
+                    return $error;
+                }
+
+                $term_id = (int) ( $input['id'] ?? 0 );
+                if ( $term_id <= 0 ) {
+                    return array( 'success' => false, 'message' => 'id is required.' );
+                }
+
+                $args = array();
+                if ( isset( $input['name'] ) ) {
+                    $args['name'] = sanitize_text_field( $input['name'] );
+                }
+                if ( isset( $input['slug'] ) ) {
+                    $args['slug'] = sanitize_title( $input['slug'] );
+                }
+
+                if ( ! empty( $args ) ) {
+                    $result = wp_update_term( $term_id, 'advanced_ads_groups', $args );
+                    if ( is_wp_error( $result ) ) {
+                        return array( 'success' => false, 'message' => $result->get_error_message() );
+                    }
+                }
+
+                if ( isset( $input['options'] ) && is_array( $input['options'] ) ) {
+                    $group_options = get_option( 'advads-ad-groups', array() );
+                    $group_options[ $term_id ] = $input['options'];
+                    update_option( 'advads-ad-groups', $group_options );
+                }
+
+                return array( 'success' => true, 'message' => 'Group updated.' );
+            },
+            'permission_callback' => 'mcp_advads_permission_callback',
+        )
+    );
+
+    wp_register_ability(
+        'advads/delete-group',
+        array(
+            'label'               => 'Delete Ad Group',
+            'description'         => 'Delete an ad group.',
+            'category'            => 'site',
+            'input_schema'        => array(
+                'type'                 => 'object',
+                'required'             => array( 'id' ),
+                'properties'           => array(
+                    'id' => array( 'type' => 'integer', 'description' => 'Group ID.' ),
+                ),
+                'additionalProperties' => false,
+            ),
+            'output_schema'       => array(
+                'type'       => 'object',
+                'properties' => array(
+                    'success' => array( 'type' => 'boolean' ),
+                    'message' => array( 'type' => 'string' ),
+                ),
+            ),
+            'execute_callback'    => function ( array $input ): array {
+                if ( $error = mcp_advads_require_active() ) {
+                    return $error;
+                }
+
+                $term_id = (int) ( $input['id'] ?? 0 );
+                if ( $term_id <= 0 ) {
+                    return array( 'success' => false, 'message' => 'id is required.' );
+                }
+
+                $result = wp_delete_term( $term_id, 'advanced_ads_groups' );
+                if ( is_wp_error( $result ) ) {
+                    return array( 'success' => false, 'message' => $result->get_error_message() );
+                }
+
+                $group_options = get_option( 'advads-ad-groups', array() );
+                if ( isset( $group_options[ $term_id ] ) ) {
+                    unset( $group_options[ $term_id ] );
+                    update_option( 'advads-ad-groups', $group_options );
+                }
+
+                return array( 'success' => true, 'message' => 'Group deleted.' );
             },
             'permission_callback' => 'mcp_advads_permission_callback',
         )
@@ -497,14 +1012,18 @@ function mcp_register_advads_abilities(): void {
                 $issues = array();
                 $adsense = get_option( 'advanced-ads-adsense', array() );
                 $ads = get_posts( array(
-                    'post_type'      => 'advanced_ads',
-                    'post_status'    => 'publish',
-                    'posts_per_page' => -1,
+                    'post_type'              => 'advanced_ads',
+                    'post_status'            => 'publish',
+                    'posts_per_page'         => -1,
+                    'no_found_rows'          => true,
+                    'update_post_term_cache' => false,
                 ) );
                 $placements = get_posts( array(
-                    'post_type'      => 'advanced_ads_plcmnt',
-                    'post_status'    => 'publish',
-                    'posts_per_page' => -1,
+                    'post_type'              => 'advanced_ads_plcmnt',
+                    'post_status'            => 'publish',
+                    'posts_per_page'         => -1,
+                    'no_found_rows'          => true,
+                    'update_post_term_cache' => false,
                 ) );
 
                 if ( empty( $adsense['adsense-id'] ) ) {
