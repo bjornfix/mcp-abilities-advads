@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, advanced-ads, adsense, ads
 Requires at least: 6.0
 Tested up to: 6.9
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 Requires Plugins: mcp-expose-abilities
 License: GPLv2 or later
 
@@ -44,6 +44,10 @@ This add-on provides 12 abilities for managing Advanced Ads through the MCP inte
 4. Activate through the Plugins menu
 
 == Changelog ==
+
+= 1.0.3 =
+* Fixed: Removed hard plugin header dependency on abilities-api to avoid slug-mismatch activation blocking
+
 
 = 1.0.2 =
 * Improve list query efficiency and normalize status input
