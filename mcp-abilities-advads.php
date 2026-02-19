@@ -9,7 +9,6 @@
  * License: GPL-2.0+
  * Requires at least: 6.0
  * Requires PHP: 7.4
- * Requires Plugins: abilities-api
  */
 
 declare( strict_types=1 );
