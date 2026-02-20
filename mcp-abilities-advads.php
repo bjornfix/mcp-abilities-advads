@@ -47,6 +47,35 @@ function mcp_advads_normalize_status( string $status ): string {
     return 'any';
 }
 
+/**
+ * Add default MCP annotations for Advanced Ads abilities.
+ *
+ * @param array  $args         Ability registration args.
+ * @param string $ability_name Ability slug.
+ * @return array
+ */
+function mcp_advads_add_default_annotations( array $args, string $ability_name ): array {
+	if ( 0 !== strpos( $ability_name, 'advads/' ) ) {
+		return $args;
+	}
+
+	if ( isset( $args['meta']['annotations'] ) ) {
+		return $args;
+	}
+
+	$readonly = ( 0 === strpos( $ability_name, 'advads/get-' ) ) || ( 0 === strpos( $ability_name, 'advads/list-' ) ) || 'advads/diagnose' === $ability_name;
+	$destructive = 0 === strpos( $ability_name, 'advads/delete-' );
+	$idempotent  = $readonly || ( 0 === strpos( $ability_name, 'advads/update-' ) ) || 'advads/update-settings' === $ability_name;
+
+	$args['meta']['annotations'] = array(
+		'readonly'    => $readonly,
+		'destructive' => $destructive,
+		'idempotent'  => $idempotent,
+	);
+
+	return $args;
+}
+
 function mcp_register_advads_abilities(): void {
     if ( ! mcp_advads_check_dependencies() ) {
         return;
@@ -58,17 +87,30 @@ function mcp_register_advads_abilities(): void {
             'label'               => 'List Ads',
             'description'         => 'List all Advanced Ads advertisements.',
             'category'            => 'site',
-            'input_schema'        => array(
-                'type'                 => 'object',
-                'properties'           => array(
-                    'status' => array(
-                        'type'        => 'string',
-                        'default'     => 'any',
-                        'description' => 'Filter by status (publish, draft, any).',
-                    ),
-                ),
-                'additionalProperties' => false,
-            ),
+	            'input_schema'        => array(
+	                'type'                 => 'object',
+	                'properties'           => array(
+	                    'status' => array(
+	                        'type'        => 'string',
+	                        'default'     => 'any',
+	                        'description' => 'Filter by status (publish, draft, any).',
+	                    ),
+	                    'limit'  => array(
+	                        'type'        => 'integer',
+	                        'default'     => 50,
+	                        'minimum'     => 1,
+	                        'maximum'     => 200,
+	                        'description' => 'Maximum number of ads to return.',
+	                    ),
+	                    'offset' => array(
+	                        'type'        => 'integer',
+	                        'default'     => 0,
+	                        'minimum'     => 0,
+	                        'description' => 'Result offset for pagination.',
+	                    ),
+	                ),
+	                'additionalProperties' => false,
+	            ),
             'output_schema'       => array(
                 'type'       => 'object',
                 'properties' => array(
@@ -79,34 +121,40 @@ function mcp_register_advads_abilities(): void {
                 ),
             ),
             'execute_callback'    => function ( array $input = array() ): array {
-                if ( $error = mcp_advads_require_active() ) {
-                    return $error;
-                }
+	                if ( $error = mcp_advads_require_active() ) {
+	                    return $error;
+	                }
 
-                $status = isset( $input['status'] ) ? mcp_advads_normalize_status( $input['status'] ) : 'any';
-                $posts = get_posts( array(
-                    'post_type'              => 'advanced_ads',
-                    'post_status'            => $status,
-                    'posts_per_page'         => 100,
-                    'no_found_rows'          => true,
-                    'update_post_term_cache' => false,
-                ) );
+	                $status = isset( $input['status'] ) ? mcp_advads_normalize_status( $input['status'] ) : 'any';
+	                $limit  = isset( $input['limit'] ) ? max( 1, min( 200, (int) $input['limit'] ) ) : 50;
+	                $offset = isset( $input['offset'] ) ? max( 0, (int) $input['offset'] ) : 0;
 
-                $ads = array();
-                foreach ( $posts as $post ) {
-                    $options = get_post_meta( $post->ID, 'advanced_ads_ad_options', true );
-                    $ads[] = array(
-                        'id'     => $post->ID,
+	                $query = new WP_Query(
+						array(
+							'post_type'              => 'advanced_ads',
+							'post_status'            => $status,
+							'posts_per_page'         => $limit,
+							'offset'                 => $offset,
+							'no_found_rows'          => false,
+							'update_post_term_cache' => false,
+						)
+					);
+
+	                $ads = array();
+	                foreach ( $query->posts as $post ) {
+	                    $options = get_post_meta( $post->ID, 'advanced_ads_ad_options', true );
+	                    $ads[] = array(
+	                        'id'     => $post->ID,
                         'title'  => $post->post_title,
                         'status' => $post->post_status,
                         'type'   => $options['type'] ?? 'unknown',
-                    );
-                }
+	                    );
+	                }
 
-                return array( 'success' => true, 'ads' => $ads, 'total' => count( $ads ) );
-            },
-            'permission_callback' => 'mcp_advads_permission_callback',
-        )
+	                return array( 'success' => true, 'ads' => $ads, 'total' => (int) $query->found_posts );
+	            },
+	            'permission_callback' => 'mcp_advads_permission_callback',
+	        )
     );
 
     wp_register_ability(
@@ -1008,40 +1056,30 @@ function mcp_register_advads_abilities(): void {
                     return $error;
                 }
 
-                $issues = array();
-                $adsense = get_option( 'advanced-ads-adsense', array() );
-                $ads = get_posts( array(
-                    'post_type'              => 'advanced_ads',
-                    'post_status'            => 'publish',
-                    'posts_per_page'         => -1,
-                    'no_found_rows'          => true,
-                    'update_post_term_cache' => false,
-                ) );
-                $placements = get_posts( array(
-                    'post_type'              => 'advanced_ads_plcmnt',
-                    'post_status'            => 'publish',
-                    'posts_per_page'         => -1,
-                    'no_found_rows'          => true,
-                    'update_post_term_cache' => false,
-                ) );
+	                $issues   = array();
+	                $adsense  = get_option( 'advanced-ads-adsense', array() );
+	                $ads_obj  = wp_count_posts( 'advanced_ads' );
+	                $plc_obj  = wp_count_posts( 'advanced_ads_plcmnt' );
+	                $ads_count = (int) ( $ads_obj->publish ?? 0 );
+	                $placements_count = (int) ( $plc_obj->publish ?? 0 );
 
                 if ( empty( $adsense['adsense-id'] ) ) {
                     $issues[] = 'AdSense Publisher ID not configured';
                 }
 
-                if ( 0 === count( $ads ) ) {
-                    $issues[] = 'No published ads found';
-                }
+	                if ( 0 === $ads_count ) {
+	                    $issues[] = 'No published ads found';
+	                }
 
                 $auto_ads_enabled = ! empty( $adsense['page-level-enabled'] );
 
                 $info = array(
                     'adsense_id'      => $adsense['adsense-id'] ?? 'Not set',
                     'auto_ads'        => $auto_ads_enabled ? 'Enabled' : 'Disabled',
-                    'placement_count' => count( $placements ),
-                    'published_ads'   => count( $ads ),
-                    'version'         => defined( 'ADVADS_VERSION' ) ? ADVADS_VERSION : 'unknown',
-                );
+	                    'placement_count' => $placements_count,
+	                    'published_ads'   => $ads_count,
+	                    'version'         => defined( 'ADVADS_VERSION' ) ? ADVADS_VERSION : 'unknown',
+	                );
 
                 return array(
                     'success' => true,
@@ -1054,4 +1092,5 @@ function mcp_register_advads_abilities(): void {
         )
     );
 }
+add_filter( 'wp_register_ability_args', 'mcp_advads_add_default_annotations', 10, 2 );
 add_action( 'wp_abilities_api_init', 'mcp_register_advads_abilities' );
