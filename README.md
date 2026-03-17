@@ -15,7 +15,30 @@ Advanced Ads management for WordPress via MCP.
 
 This add-on plugin exposes Advanced Ads management through MCP (Model Context Protocol). Your AI assistant can manage ads, placements, groups, settings, and run diagnostics.
 
-**Part of the [MCP Expose Abilities](https://devenia.com/plugins/mcp-expose-abilities/) ecosystem.**
+**Part of the [MCP Expose Abilities](https://github.com/bjornfix/mcp-expose-abilities) ecosystem.**
+
+This is not just another narrow plugin integration. It is one piece of a bigger open WordPress automation stack that lets AI agents do real work inside WordPress instead of just telling humans what to click.
+
+## Why This Is Cool
+
+If your site uses Advanced Ads, this turns repetitive ad-admin work into something you can simply hand to Codex or Claude.
+
+Instead of:
+
+- opening wp-admin
+- hunting down placements and groups
+- cross-checking settings manually
+
+you can tell the agent what needs doing and let it inspect first, then make the narrow change.
+
+## Documentation
+
+- [Core Plugin: MCP Expose Abilities](https://github.com/bjornfix/mcp-expose-abilities)
+- [MCP Wiki Home](https://github.com/bjornfix/mcp-expose-abilities/wiki)
+- [Why Teams Use It](https://github.com/bjornfix/mcp-expose-abilities/wiki/Why-Teams-Use-It)
+- [Use Cases](https://github.com/bjornfix/mcp-expose-abilities/wiki/Use-Cases)
+- [Advanced Ads Add-On Guide](https://github.com/bjornfix/mcp-expose-abilities/wiki/Addon-Advanced-Ads)
+- [Getting Started](https://github.com/bjornfix/mcp-expose-abilities/wiki/Getting-Started)
 
 ## Requirements
 
@@ -115,8 +138,19 @@ GPL-2.0+
 
 [Devenia](https://devenia.com) - We've been doing SEO and web development since 1993.
 
+## Free and Open
+
+Like the rest of the ecosystem, this add-on is free to use, fully open source, and built from real production needs rather than premium upsell logic.
+
+## Star and Share
+
+If this add-on helps, please star the repo, share the ecosystem, and point people to the main wiki:
+
+- https://github.com/bjornfix/mcp-expose-abilities
+- https://github.com/bjornfix/mcp-expose-abilities/wiki
+
 ## Links
 
-- [Plugin Page](https://devenia.com/plugins/mcp-expose-abilities/)
 - [Core Plugin (MCP Expose Abilities)](https://github.com/bjornfix/mcp-expose-abilities)
-- [All Add-on Plugins](https://devenia.com/plugins/mcp-expose-abilities/#add-ons)
+- [Main Wiki](https://github.com/bjornfix/mcp-expose-abilities/wiki)
+- [Advanced Ads Add-On Guide](https://github.com/bjornfix/mcp-expose-abilities/wiki/Addon-Advanced-Ads)
