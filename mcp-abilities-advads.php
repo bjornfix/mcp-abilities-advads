@@ -3,11 +3,11 @@
  * Plugin Name: MCP Abilities - Advanced Ads
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-advads
  * Description: MCP abilities for Advanced Ads. Manage ads, placements, groups, and settings programmatically.
- * Version: 1.0.3
+ * Version: 1.0.4
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
- * Requires at least: 6.0
+ * Requires at least: 6.9
  * Requires PHP: 7.4
  */
 
