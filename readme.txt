@@ -3,7 +3,7 @@ Contributors: devenia
 Tags: mcp, advanced-ads, adsense, ads
 Requires at least: 6.9
 Tested up to: 7.0
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 Requires Plugins: mcp-expose-abilities
 License: GPLv2 or later
 
@@ -44,6 +44,9 @@ This add-on provides 12 abilities for managing Advanced Ads through the MCP inte
 4. Activate through the Plugins menu
 
 == Changelog ==
+
+= 1.0.5 =
+* Fixed: Treat parameterless read abilities as no-input abilities so MCP calls without parameters validate correctly
 
 = 1.0.4 =
 * Fixed: Updated WordPress compatibility metadata for the Abilities API requirement and refreshed the public package checksum

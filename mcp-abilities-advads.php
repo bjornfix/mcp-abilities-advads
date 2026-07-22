@@ -3,7 +3,7 @@
  * Plugin Name: MCP Abilities - Advanced Ads
  * Plugin URI: https://github.com/bjornfix/mcp-abilities-advads
  * Description: MCP abilities for Advanced Ads. Manage ads, placements, groups, and settings programmatically.
- * Version: 1.0.4
+ * Version: 1.0.5
  * Author: Devenia
  * Author URI: https://devenia.com
  * License: GPL-2.0+
@@ -436,11 +436,6 @@ function mcp_register_advads_abilities(): void {
             'label'               => 'List Placements',
             'description'         => 'List all ad placements.',
             'category'            => 'site',
-            'input_schema'        => array(
-                'type'                 => 'object',
-                'properties'           => array(),
-                'additionalProperties' => true,
-            ),
             'output_schema'       => array(
                 'type'       => 'object',
                 'properties' => array(
@@ -741,9 +736,6 @@ function mcp_register_advads_abilities(): void {
             'label'               => 'List Ad Groups',
             'description'         => 'List all ad groups.',
             'category'            => 'site',
-            'input_schema'        => array(
-                'type' => 'object',
-            ),
             'output_schema'       => array(
                 'type'       => 'object',
                 'properties' => array(
@@ -956,9 +948,6 @@ function mcp_register_advads_abilities(): void {
             'label'               => 'Get Settings',
             'description'         => 'Get Advanced Ads settings.',
             'category'            => 'site',
-            'input_schema'        => array(
-                'type' => 'object',
-            ),
             'output_schema'       => array(
                 'type'       => 'object',
                 'properties' => array(
@@ -1039,9 +1028,6 @@ function mcp_register_advads_abilities(): void {
             'label'               => 'Diagnose Issues',
             'description'         => 'Check for common Advanced Ads configuration issues.',
             'category'            => 'site',
-            'input_schema'        => array(
-                'type' => 'object',
-            ),
             'output_schema'       => array(
                 'type'       => 'object',
                 'properties' => array(

@@ -8,7 +8,7 @@ MCP abilities for Advanced Ads. Manage ads, placements, groups, and settings pro
 [![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple.svg)](https://php.net)
 
 **Tested up to:** 7.0
-**Stable tag:** 1.0.4
+**Stable tag:** 1.0.5
 **License:** GPLv2 or later
 **License URI:** https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -166,6 +166,9 @@ If you skip base-stack verification and start with add-ons immediately, troubles
 ```
 
 ## Changelog
+
+### 1.0.5
+- Fixed: Treat parameterless read abilities as no-input abilities so MCP calls without parameters validate correctly
 
 ### 1.0.4
 - Fixed: Updated WordPress compatibility metadata for the Abilities API requirement and refreshed the public package checksum
