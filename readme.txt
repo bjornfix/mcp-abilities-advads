@@ -1,5 +1,5 @@
 === MCP Abilities - Advanced Ads ===
-Contributors: devenia
+Contributors: basicus
 Tags: mcp, advanced-ads, adsense, ads
 Requires at least: 6.9
 Tested up to: 7.0
